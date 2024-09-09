@@ -1,0 +1,27 @@
+defaults:
+  - override hydra/job_logging: default
+  - override hydra/hydra_logging: default
+
+training:
+  epochs: 100
+  batch_size: 4
+  model_name: "abyssal_model"
+  log_dir: "runs/abyssal"
+
+model:
+  device: "cuda"
+  esm_model_name: "facebook/esm2_t33_650M_UR50D"
+  hidden_size: 1280
+  num_layers: 2
+  dropout: 0.5
+
+train_dataset: "/data/train_k50.csv"
+valid_dataset: "/data/test_prostata.csv"
+
+optimizer:
+  type: Adam
+  lr: 0.001
+  weight_decay: 0.0001
+
+criterion:
+  type: CrossEntropyLoss

@@ -1,0 +1,25 @@
+defaults:
+  - override hydra/job_logging: default
+  - override hydra/hydra_logging: default
+
+training:
+  epochs: 100
+  batch_size: 32
+  model_name: "baseline_model_mlp"
+  log_dir: "runs/baseline"
+
+model:
+  device: "cuda"
+  in_channels: 358
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.5
+
+
+optimizer:
+  type: Adam
+  lr: 0.001
+  weight_decay: 0.0001
+
+criterion:
+  type: CrossEntropyLoss

@@ -1,0 +1,44 @@
+x-environment: &environment
+  DEBUG: 1
+
+x-args: &common_args
+  BASE_IMG: ${BASE_IMG}
+  IMAGE: ${IMAGE}
+  WORKDIR: ${WORKDIR}
+  DATA_DIR: ${DATA_DIR}
+
+services:
+  train:
+    build:
+      context: .
+      dockerfile: ci/build/main/Dockerfile
+      args:
+        <<: *common_args
+    image: ${IMAGE}
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - ./src:${WORKDIR}
+      - ${DATA_DIR}:/data/
+    environment:
+      <<: *environment
+    shm_size: 64g
+    mem_limit: 330G
+    mem_reservation: 5G
+    restart: always
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    command:
+    - bash
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              device_ids: ['0']
+              driver: nvidia
+
+networks:
+  ${DOCKER_NETWORK:-train_default}:
+    external: true
