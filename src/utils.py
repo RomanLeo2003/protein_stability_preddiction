@@ -1,3 +1,5 @@
+from functools import partial
+
 import torch
 import numpy as np
 from sklearn.metrics import (
@@ -10,7 +12,8 @@ from sklearn.metrics import (
 )
 from sklearn.metrics import ndcg_score as _ndcg_score
 from scipy.stats import pearsonr as _pearsonr, spearmanr as _spearmanr, rankdata
-from functools import partial
+from tqdm import tqdm
+
 from models import MLPHead, ABYSSALModel
 
 
@@ -41,7 +44,7 @@ def train_epoch(model, optimizer, criterion, train_loader, device):
     total_loss = 0
     preds = []
     targets = []
-    for batch_idx, (data, target, seq_lens) in enumerate(train_loader):
+    for batch_idx, (data, target, seq_lens, mut_positions) in enumerate(tqdm(train_loader)):
         # print(seq_lens)
 
         wt, mt = data
@@ -52,7 +55,7 @@ def train_epoch(model, optimizer, criterion, train_loader, device):
         optimizer.zero_grad()
         mask = (torch.arange(padded_seq_len)[None, :] < seq_lens[:, None]).to(device)
 
-        output = model(wt, mt, mask)
+        output = model(wt, mt, mask, mut_positions)
         targets.append(target)
         preds.append(output)
         loss = criterion(output, target)
@@ -60,14 +63,16 @@ def train_epoch(model, optimizer, criterion, train_loader, device):
         optimizer.step()
         total_loss += loss.item()
 
-        if batch_idx % 10 == 0:
+        if batch_idx % 100 == 0:
+            print('preds: ', output[0])
+            print('target: ', target[0])
             print(f"batch {batch_idx} loss: {loss.item()}")
 
     avg_loss = total_loss / len(train_loader)
     return avg_loss, torch.cat(targets), torch.cat(preds)
 
 
-def val_epoch(model, criterion, test_loader, device):
+def val_epoch_baseline(model, criterion, test_loader, device):
     all_outputs = []
     targets = []
     total_loss = 0
@@ -83,6 +88,30 @@ def val_epoch(model, criterion, test_loader, device):
     avg_loss = total_loss / len(test_loader)
     return avg_loss, torch.cat(targets), torch.cat(all_outputs)
 
+def val_epoch(model, criterion, test_loader, device):
+    total_loss = 0
+    preds = []
+    targets = []
+    with torch.no_grad():
+        for batch_idx, (data, target, seq_lens, mut_positions) in enumerate(tqdm(test_loader)):
+            wt, mt = data
+            padded_seq_len = wt["input_ids"].shape[1]
+            wt = wt.to(device)
+            mt = mt.to(device)
+            target = target.to(device)
+            mask = (torch.arange(padded_seq_len)[None, :] < seq_lens[:, None]).to(device)
+
+            output = model(wt, mt, mask, mut_positions)
+            targets.append(target)
+            preds.append(output)
+            loss = criterion(output, target)
+            total_loss += loss.item()
+
+            if batch_idx % 100 == 0:
+                print(f"batch {batch_idx} loss: {loss.item()}")
+
+    avg_loss = total_loss / len(test_loader)
+    return avg_loss, torch.cat(targets), torch.cat(preds)
 
 # Pearson correlation
 def pearsonr(true, pred):
@@ -212,5 +241,12 @@ def build_baseline_model(model_cfg):
 
 def build_abyssal_model(model_cfg):
     return ABYSSALModel(
-        esm_model_name=model_cfg.esm_model_name, embed_dim=model_cfg.hidden_size
+        single_amino_acid_prediction=model_cfg.single_amino_acid_prediction,
+        esm_model_name=model_cfg.esm_model_name,
+        embed_dim=model_cfg.embed_dim,
+        dropout=model_cfg.dropout,
+        light_attention_kernel_size=model_cfg.light_attention_kernel_size,
+        hidden_dim=model_cfg.hidden_dim,
+        n_hidden_layers=model_cfg.n_hidden_layers,
     )
+

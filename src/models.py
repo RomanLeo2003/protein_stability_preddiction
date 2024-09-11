@@ -151,17 +151,54 @@ class FFN(nn.Module):
 
 
 class ABYSSALModel(nn.Module):
-    def __init__(self, esm_model_name, embed_dim, output_dim=1):
+    def __init__(
+        self,
+        esm_model_name,
+        embed_dim,
+        single_amino_acid_prediction,
+        dropout=0.25,
+        light_attention_kernel_size=9,
+        n_hidden_layers=3,
+        hidden_dim=256,
+        output_dim=1,
+    ):
         super(ABYSSALModel, self).__init__()
         self.esm_model = EsmModel.from_pretrained(esm_model_name)
-        self.esm_model.eval()
-        self.light_attention = LightAttention(embeddings_dim=embed_dim)
-        self.fc_block = FFN(embeddings_dim=embed_dim * 2, output_dim=output_dim)
+        self.single_amino_acid_prediction = single_amino_acid_prediction
+        for param in self.esm_model.parameters():
+            param.requires_grad = False
+        self.light_attention = LightAttention(
+            embeddings_dim=embed_dim,
+            output_dim=embed_dim,
+            conv_dropout=dropout,
+            kernel_size=light_attention_kernel_size,
+        )
+        self.fc_block = FFN(
+            embeddings_dim=embed_dim * 2,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            dropout=dropout,
+            n_hidden_layers=n_hidden_layers,
+        )
 
-    def forward(self, wt_tokens, mt_tokens, mask):
+    def forward(self, wt_tokens, mt_tokens, mask, mut_positions):
+        wt_embedding = self.esm_model(**wt_tokens)["last_hidden_state"]
+        mt_embedding = self.esm_model(**mt_tokens)["last_hidden_state"]
 
-        wt_embedding = self.esm_model(**wt_tokens)["last_hidden_state"].transpose(1, 2)
-        mt_embedding = self.esm_model(**mt_tokens)["last_hidden_state"].transpose(1, 2)
+        if self.single_amino_acid_prediction:
+            batch_size, seq_len, emb_size = wt_embedding.shape
+
+            # Проверка: mut_positions должен быть тензором с формой [batch_size]
+            if mut_positions.dim() == 1 and mut_positions.size(0) == batch_size:
+                # Извлечение эмбеддингов для мутации (по индексам из mut_positions)
+                wt_embedding = wt_embedding[torch.arange(batch_size), mut_positions].unsqueeze(1)  # Shape: [batch_size, 1, emb_size]
+                mt_embedding = mt_embedding[torch.arange(batch_size), mut_positions].unsqueeze(1)  # Shape: [batch_size, 1, emb_size]
+            else:
+                raise ValueError(f"mut_positions должен иметь форму [batch_size], но получил форму {mut_positions.shape}")
+
+        
+        wt_embedding = wt_embedding.transpose(1, 2)
+        mt_embedding = mt_embedding.transpose(1, 2)
 
         attn_output1 = self.light_attention(wt_embedding, mask)
         attn_output2 = self.light_attention(mt_embedding, mask)
@@ -171,12 +208,3 @@ class ABYSSALModel(nn.Module):
         output = self.fc_block(concatenated)
         return output
 
-
-# seq1 = tokenizer(
-#     "ORIGINAL_SEQUENCE", return_tensors="pt", padding=True, truncation=True
-# )
-# seq2 = tokenizer("MUTATED_SEQUENCE", return_tensors="pt", padding=True, truncation=True)
-
-# model = ABYSSALModel(esm_model, embed_dim=esm_model.config.hidden_size)
-# output = model(seq1, seq2)
-# print("Predicted ΔΔG:", output.item())

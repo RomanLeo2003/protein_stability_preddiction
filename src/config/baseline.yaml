@@ -7,6 +7,7 @@ training:
   batch_size: 32
   model_name: "baseline_model_mlp"
   log_dir: "runs/baseline"
+ 
 
 model:
   device: "cuda"

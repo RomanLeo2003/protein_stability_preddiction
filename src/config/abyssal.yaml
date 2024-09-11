@@ -3,25 +3,34 @@ defaults:
   - override hydra/hydra_logging: default
 
 training:
-  epochs: 100
-  batch_size: 4
-  model_name: "abyssal_model"
-  log_dir: "runs/abyssal"
+  epochs: 60
+  batch_size: 256
+  model_name: "abyssal_model_single_acid_weighted_mse"
+  log_dir: "runs/abyssal_single_acid_weighted_mse"
+  checkpoint_dir: "/data/models_single_acid_weighted_mse"
 
 model:
+  single_amino_acid_prediction: True
   device: "cuda"
-  esm_model_name: "facebook/esm2_t33_650M_UR50D"
-  hidden_size: 1280
-  num_layers: 2
-  dropout: 0.5
+  esm_model_name: "facebook/esm2_t30_150M_UR50D"
+  light_attention_kernel_size: 9
+  embed_dim: 640
+  hidden_dim: 256
+  n_hidden_layers: 2
+  dropout: 0.25
 
-train_dataset: "/data/train_k50.csv"
-valid_dataset: "/data/test_prostata.csv"
+train_dataset: "/data/train.csv"
+valid_dataset: "/data/valid.csv"
+test_datast: "/data/test.csv"
 
 optimizer:
   type: Adam
   lr: 0.001
   weight_decay: 0.0001
 
+scheduler:
+  t_max: last_epoch
+  eta_min: 1e-5
+
 criterion:
-  type: CrossEntropyLoss
+  type: WeightedMSELoss

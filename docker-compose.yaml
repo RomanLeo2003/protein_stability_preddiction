@@ -36,7 +36,7 @@ services:
         reservations:
           devices:
             - capabilities: [gpu]
-              device_ids: ['0']
+              device_ids: ['4']
               driver: nvidia
 
 networks:

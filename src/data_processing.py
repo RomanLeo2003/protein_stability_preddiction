@@ -4,6 +4,17 @@ from protein_task import get_protein_task, get_feature_tensor
 from torch.utils.data import TensorDataset, DataLoader, Dataset
 from transformers import EsmTokenizer
 
+def find_first_diff_index(str1, str2):
+    min_len = min(len(str1), len(str2))
+    
+    for i in range(min_len):
+        if str1[i] != str2[i]:
+            return i
+
+    if len(str1) != len(str2):
+        return min_len
+    
+    return -1
 
 class ProteinDataset(Dataset):
     def __init__(
@@ -23,6 +34,7 @@ class ProteinDataset(Dataset):
     def __getitem__(self, index):
         wt_seq = self.wt_seqs_list[index]
         mt_seq = self.mt_seqs_list[index]
+        mutation_position = find_first_diff_index(wt_seq, mt_seq)
         seq_length = len(wt_seq)
         wt_tokens = self.tokenizer(
             wt_seq,
@@ -45,7 +57,7 @@ class ProteinDataset(Dataset):
         mt_tokens["input_ids"] = mt_tokens["input_ids"].squeeze(0)
         mt_tokens["attention_mask"] = mt_tokens["attention_mask"].squeeze(0)
         ddG = self.ddG_list[index]
-        return ((wt_tokens, mt_tokens), torch.Tensor([ddG]), seq_length)
+        return ((wt_tokens, mt_tokens), torch.Tensor([ddG]), seq_length, mutation_position)
 
 
 def load_data_prostata(
@@ -160,9 +172,15 @@ def load_data(train_csv_filename, val_csv_filename, tokenizer_name, batch_size):
     # train_df = pd.read_csv()
     # val_df = pd.read_csv()
     train_dataset = ProteinDataset(train_csv_filename, tokenizer_name)
-    val_dataset = ProteinDataset(val_csv_filename, tokenizer_name, max_length=690)
+    val_dataset = ProteinDataset(val_csv_filename, tokenizer_name)
     train_loader = DataLoader(
         dataset=train_dataset, batch_size=batch_size, shuffle=True
     )
     val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader
+
+def load_test_data(test_csv_filename, tokenizer_name, batch_size):
+    df = pd.read_csv(test_csv_filename)
+    test_dataset = ProteinDataset(test_csv_filename, tokenizer_name)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
+    return test_loader, df
